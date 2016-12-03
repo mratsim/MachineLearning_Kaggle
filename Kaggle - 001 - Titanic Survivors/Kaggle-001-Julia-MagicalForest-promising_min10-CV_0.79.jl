@@ -7,7 +7,6 @@ using Gadfly
 using ScikitLearn: DataFrameMapper, @sk_import, Pipelines, fit!, predict
 using ScikitLearn.CrossValidation
 using ScikitLearnBase: @declare_hyperparameters, BaseEstimator
-using ScikitLearn.GridSearch
 import ScikitLearnBase.simple_get_params
 
 # @sk_import linear_model: LogisticRegression
@@ -522,29 +521,18 @@ X_train = train
 Y_train = convert(Array, train[:Survived])
 
 
-# #Cross Validation - check model accuracy
-# crossval = round(cross_val_score(pipe, X_train, Y_train, cv =10), 2)
-# print("\n",crossval,"\n")
-# print(mean(crossval))
+#Cross Validation - check model accuracy
+crossval = round(cross_val_score(pipe, X_train, Y_train, cv =10), 2)
+print("\n",crossval,"\n")
+print(mean(crossval))
 
-# GridSearch, optimize Cross Val Score automatically
-grid = Dict(:ntrees => 10:30:240,
-            :nsubfeatures => 0:1:13,
-            :partialsampling => 0.2:0.1:1.0,
-            :maxdepth => -1:2:13
-)
+model = fit!(pipe, X_train, Y_train)
+# print(model)
 
-gridsearch = GridSearchCV(pipe, grid)
-fit!(gridsearch, X_train, Y_train)
-println("Best hyper-parameters: $(gridsearch.best_params_)")
+result=DataFrame()
+result[:PassengerId] = test[:PassengerId]
+result[:Survived] = @data predict(model,test)
 
-# model = fit!(pipe, X_train, Y_train)
-# # print(model)
+result
 
-# result=DataFrame()
-# result[:PassengerId] = test[:PassengerId]
-# result[:Survived] = @data predict(model,test)
-
-# result
-
-# writetable("julia-magicalforests.csv",result)
+writetable("julia-magicalforests.csv",result)
