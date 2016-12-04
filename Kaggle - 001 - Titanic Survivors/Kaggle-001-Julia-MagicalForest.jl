@@ -515,36 +515,36 @@ pipe = Pipelines.Pipeline([
     ("extract_ageclass",PP_AgeClassTransformer()),
     ("DEBUG",InspectTransformer()),
      ("featurize", mapper),
-    ("forest", RandomForestClassifier(ntrees=200, nsubfeatures=3)) #nsubfeatures, partialsampling, maxdepth
+    ("forest", RandomForestClassifier(ntrees=1000, nsubfeatures=5)) #nsubfeatures, partialsampling, maxdepth
     ])
 
 X_train = train
 Y_train = convert(Array, train[:Survived])
 
 
-# #Cross Validation - check model accuracy
-# crossval = round(cross_val_score(pipe, X_train, Y_train, cv =10), 2)
-# print("\n",crossval,"\n")
-# print(mean(crossval))
+#Cross Validation - check model accuracy
+crossval = round(cross_val_score(pipe, X_train, Y_train, cv =10), 2)
+print("\n",crossval,"\n")
+print(mean(crossval))
 
-# GridSearch, optimize Cross Val Score automatically
-grid = Dict(:ntrees => 10:30:240,
-            :nsubfeatures => 0:1:13,
-            :partialsampling => 0.2:0.1:1.0,
-            :maxdepth => -1:2:13
-)
+# # GridSearch, optimize Cross Val Score automatically
+# grid = Dict(:ntrees => 10:30:240,
+#             :nsubfeatures => 0:1:13,
+#             :partialsampling => 0.2:0.1:1.0,
+#             :maxdepth => -1:2:13
+# )
 
-gridsearch = GridSearchCV(pipe, grid)
-fit!(gridsearch, X_train, Y_train)
-println("Best hyper-parameters: $(gridsearch.best_params_)")
+# gridsearch = GridSearchCV(pipe, grid)
+# fit!(gridsearch, X_train, Y_train)
+# println("Best hyper-parameters: $(gridsearch.best_params_)")
 
-# model = fit!(pipe, X_train, Y_train)
-# # print(model)
+model = fit!(pipe, X_train, Y_train)
+# print(model)
 
-# result=DataFrame()
-# result[:PassengerId] = test[:PassengerId]
-# result[:Survived] = @data predict(model,test)
+result=DataFrame()
+result[:PassengerId] = test[:PassengerId]
+result[:Survived] = @data predict(model,test)
 
-# result
+result
 
-# writetable("julia-magicalforests.csv",result)
+writetable("julia-magicalforests.csv",result)
