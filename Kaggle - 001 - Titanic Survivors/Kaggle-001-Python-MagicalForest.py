@@ -12,7 +12,7 @@ from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
 from sklearn import preprocessing
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import LabelBinarizer, RobustScaler, Binarizer, StandardScaler
+from sklearn.preprocessing import LabelBinarizer, RobustScaler, Binarizer, StandardScaler, OneHotEncoder
 from sklearn_pandas import DataFrameMapper, cross_val_score
 from sklearn.model_selection import GridSearchCV
 from time import time
@@ -395,27 +395,27 @@ class LabelBinForBinaryVal(LabelBinarizer):
 
 
 mapper = DataFrameMapper([
-    ('Pclass', LabelBinarizer()),
-  (['Age'], None),
-#    ('CptTitle', LabelBinarizer()),
+    (['Pclass'], OneHotEncoder()),
+#   (['Age'], None),
+# #    ('CptTitle', LabelBinarizer()),
     ('Sex', LabelBinForBinaryVal()),
-    # ('Ticket', LabelBinarizer()),
+#     # ('Ticket', LabelBinarizer()),
    (['SibSp'], None),
    (['Parch'], None),
-    (['Fare'], None),
-#    ('CptDeck', LabelBinarizer()),
-    # (['CptTitleCat'], None),
+#     (['Fare'], None),
+# #    ('CptDeck', LabelBinarizer()),
+#     # (['CptTitleCat'], None),
     ('CptTitleLabel', LabelBinarizer()),
-#    ('CptName', LabelBinarizer()),
-#    (['CptNameFreq'], None),
-    (['CptFamSize'], None),
-    ('CptFamType', LabelBinarizer()),
-    (['CptFareGroup'], None),
-    (['CptAgeGroup'], None),
-    (['CptFarePerson'], None),
-   ('Embarked', LabelBinarizer()),
-    (['CptTicketFreq'], None),
-   (['CptAgeClass'], None)
+# #    ('CptName', LabelBinarizer()),
+# #    (['CptNameFreq'], None),
+#     (['CptFamSize'], None),
+#     ('CptFamType', LabelBinarizer()),
+#     (['CptFareGroup'], None),
+#     (['CptAgeGroup'], None),
+#     (['CptFarePerson'], None),
+#    ('Embarked', LabelBinarizer()),
+#     (['CptTicketFreq'], None),
+#    (['CptAgeClass'], None)
     ])
 
 ######################################
@@ -516,11 +516,17 @@ def top_feat():
 
     feature_list = []
     for feature in pipe.named_steps['featurize'].features:
-        try:
-            for feature_value in feature[1].classes_:
-                feature_list.append(feature[0]+'_'+feature_value)
-        except:
-            feature_list.append(feature[0])
+        if isinstance(feature[1], OneHotEncoder):
+            for feature_value in feature[1].active_features_: #For LabelBinarizer
+                print(feature[0][0])
+                print(feature_value)
+                feature_list.append(feature[0][0]+'_'+str(feature_value))
+        else:
+            try:
+                for feature_value in feature[1].classes_: #For LabelBinarizer and LabelBinForBinaryVal
+                    feature_list.append(feature[0]+'_'+feature_value)
+            except:
+                feature_list.append(feature[0])
 
 
     # # Can't do the following with Binarizers and Label Binarizers due to change in columns
@@ -544,7 +550,7 @@ def output():
 X_train = train
 y_train = train['Survived']
 
-crossval()
+# crossval()
 # gridsearch()
 
 
