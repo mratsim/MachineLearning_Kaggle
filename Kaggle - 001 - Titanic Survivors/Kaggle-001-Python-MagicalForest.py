@@ -7,7 +7,8 @@
 import re as re
 import pandas as pd
 import numpy as np
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
+# from xgboost import XGBClassifier
 from sklearn import preprocessing
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.pipeline import Pipeline
@@ -15,6 +16,7 @@ from sklearn.preprocessing import LabelBinarizer, RobustScaler, Binarizer, Stand
 from sklearn_pandas import DataFrameMapper, cross_val_score
 from sklearn.model_selection import GridSearchCV
 from time import time
+# import seaborn as sb
 
 train = pd.read_csv('./train.csv', delimiter=',', header=0) #Can't use column 0 Passenger ID as index, it's disappearing in the transform proc'
 test = pd.read_csv('./test.csv', delimiter=',', header=0)
@@ -57,7 +59,7 @@ class PP_TitleCatTransformer(BaseEstimator, TransformerMixin):
             "Rev.": 3,
             "Dr.": 3,
             "Mme.": 2,
-            "Ms.": 1,
+            "Ms.": 2,
             "Major.": 3,
             "Lady.": 3,
             "Sir.": 3,
@@ -76,6 +78,40 @@ class PP_TitleCatTransformer(BaseEstimator, TransformerMixin):
         df = pd.DataFrame(X)
         return df.assign(
             CptTitleCat = df["CptTitle"] 
+                          .map(lambda s:
+                               self.dicoRef[s]))
+
+class PP_TitleLabelTransformer(BaseEstimator, TransformerMixin):
+    def __init__(self):
+        # 0, young, 1 unmarried, 2 normal, 3 high status
+        self.dicoRef = {
+            "Mr.": "Mr",
+            "Mrs.": "Mrs",
+            "Miss.": "Miss",
+            "Master.": "Child",
+            "Don.": "Nobility",
+            "Rev.": "Profession",
+            "Dr.": "Profession",
+            "Mme.": "Mrs",
+            "Ms.": "Mrs",
+            "Major.": "Military",
+            "Lady.": "Nobility",
+            "Sir.": "Nobility",
+            "Mlle.": "Miss",
+            "Col.": "Military",
+            "Capt.": "Military",
+            "the Countess.": "Nobility",
+            "Jonkheer.": "Nobility",
+            "Dona.": "Nobility"
+        }
+    
+    def fit(self, X, y=None, **fit_params):
+        return self
+    
+    def transform(self, X, **transform_params):
+        df = pd.DataFrame(X)
+        return df.assign(
+            CptTitleLabel = df["CptTitle"] 
                           .map(lambda s:
                                self.dicoRef[s]))
 
@@ -140,6 +176,24 @@ class PP_FamSizeTransformer(BaseEstimator, TransformerMixin):
         df = pd.DataFrame(X) #if using X directly it thinks it's a list ... dynalic typing ...
         return df.assign(
             CptFamSize = df['SibSp'] + df['Parch'] + 1
+            )
+
+class PP_FamTypeTransformer(BaseEstimator, TransformerMixin):
+    def __init__(self):
+        pass
+    
+    def fit(self, X, y=None, **fit_params):
+        return self
+    
+    def transform(self, X, **transform_params):
+        df = pd.DataFrame(X) #if using X directly it thinks it's a list ... dynalic typing ...
+        return df.assign(
+            CptFamType = pd.cut(df['CptFamSize'],
+                                [1,2,5,np.inf],
+                                right=False,
+                                labels=['solo','small','big'],
+                                include_lowest=True
+                                )
             )
 
 ####### Fare Transformers ############
@@ -274,19 +328,19 @@ class PP_AgeGroupImputer(BaseEstimator, TransformerMixin):
         return PP_AgeGroupImputer.combineAgeGroup(df,self.df_AgeGroup)
 
 class PP_AgeImputer(BaseEstimator, TransformerMixin):
-    #depends from AgeGroup and CptTitleCat, so might introduce bias
+    #depends from AgeGroup and CptTitleLabel, so might introduce bias
     def __init__(self):
         self.df_Age = pd.DataFrame()
     
     def fit(self, X, y=None, **fit_params):
-        self.df_Age = X.groupby(['Pclass','Sex','CptTitleCat'])['Age'] \
+        self.df_Age = X.groupby(['Pclass','Sex','CptTitleLabel'])['Age'] \
                         .median() \
                         .reset_index()
         return self
 
     def combineAge(DF1, DF2):
         df2 = pd.DataFrame(DF2)
-        df = pd.merge(DF1,df2,on=['Pclass','Sex','CptTitleCat'],how='left') #might also create level_3 column for empty join on CptTitleCat
+        df = pd.merge(DF1,df2,on=['Pclass','Sex','CptTitleLabel'],how='left') #might also create level_3 column for empty join on CptTitleLabel
         df['Age'] = df["Age_x"].fillna(df["Age_y"])
         #df.drop(['Age_x','Age_y'], axis=1, inplace=True)
         return df
@@ -341,19 +395,21 @@ class LabelBinForBinaryVal(LabelBinarizer):
 
 
 mapper = DataFrameMapper([
-    (['Pclass'], Binarizer()),
+    ('Pclass', LabelBinarizer()),
   (['Age'], None),
-   ('CptTitle', LabelBinarizer()),
+#    ('CptTitle', LabelBinarizer()),
     ('Sex', LabelBinForBinaryVal()),
     # ('Ticket', LabelBinarizer()),
    (['SibSp'], None),
    (['Parch'], None),
     (['Fare'], None),
-   ('CptDeck', LabelBinarizer()),
-    (['CptTitleCat'], None),
+#    ('CptDeck', LabelBinarizer()),
+    # (['CptTitleCat'], None),
+    ('CptTitleLabel', LabelBinarizer()),
 #    ('CptName', LabelBinarizer()),
 #    (['CptNameFreq'], None),
     (['CptFamSize'], None),
+    ('CptFamType', LabelBinarizer()),
     (['CptFareGroup'], None),
     (['CptAgeGroup'], None),
     (['CptFarePerson'], None),
@@ -373,7 +429,9 @@ pipe = Pipeline([
     ("extract_ticketfreq",PP_TicketFreqTransformer()), #Note: for some reason ther eis a reindex error if put far down the pipeline
     ("extract_title", PP_TitleTransformer()),
     ("extract_titlecat", PP_TitleCatTransformer()),
+    ("extract_titlelabel", PP_TitleLabelTransformer()),
     ("extract_famsize", PP_FamSizeTransformer()),
+    ("extract_famtype", PP_FamTypeTransformer()),
     ("fillNA_Fare", PP_FareImputer()),
     ("extract_faregroup", PP_FareGroupTransformer()),
     ("extract_fareperson", PP_FarePersonTransformer()),
@@ -384,72 +442,116 @@ pipe = Pipeline([
     ("extract_ageclass",PP_AgeClassTransformer()),
     ("DEBUG",DebugTransformer()),
      ("featurize", mapper),
-    ("forest", RandomForestClassifier(
-        n_estimators=15, 
-        max_features="sqrt", 
-        min_samples_split=18,
-        criterion= 'gini',
+    ("forest", ExtraTreesClassifier(
+        n_estimators=1000,
+        min_samples_split=4,
+        min_samples_leaf=4,
+        criterion= 'entropy',
+        # max_features = 3,
+        max_depth = 10,
         n_jobs=-1))
     ])
+    # ("xgboost", XGBClassifier(
+    #     ))
+    # ])
+########################Helper functions ################
+##### Cross Validation
+def crossval():
+    cv = cross_val_score(pipe, X_train, y_train, cv=5)
+    print("Cross Validation Scores are: ", cv.round(3))
+    print("Mean CrossVal score is: ", round(cv.mean(),3))
+    print("Std Dev CrossVal score is: ", round(cv.std(),3))
+
+##### GridSearch Tune hyperparameters #######
+def gridsearch():
+    param_grid = { "forest__n_estimators"      : [10,30,150], #[10, 30, 150, 700, 1000],
+                # "forest__criterion"         : ["gini", "entropy"],
+            # "forest__max_features"      : [3, 5, 7, "auto","log2"],
+            "forest__max_depth"         : [None, 5,10,15,20],
+                "forest__min_samples_split" : [2,4,8,16],
+            "forest__min_samples_leaf": [1,2,4,8,16],
+            #    "forest__bootstrap": [True, False],
+            #    "forest__oob_score": [True,False]
+            }
+            # GridSearchCV took 507.96 seconds for 300 candidate parameter settings.
+            # Model with rank: 1
+            # Mean validation score: 0.835 (std: 0.015)
+            # Parameters: {'forest__max_depth': 10, 'forest__min_samples_split': 4, 'forest__min_samples_leaf': 4, 'forest__n_estimators':
+            # 10}
+
+            # Model with rank: 2
+            # Mean validation score: 0.834 (std: 0.015)
+            # Parameters: {'forest__max_depth': 10, 'forest__min_samples_split': 4, 'forest__min_samples_leaf': 2, 'forest__n_estimators':
+            # 10}
+
+            # Model with rank: 2
+            # Mean validation score: 0.834 (std: 0.019)
+            # Parameters: {'forest__max_depth': 20, 'forest__min_samples_split': 8, 'forest__min_samples_leaf': 2, 'forest__n_estimators':
+            # 30}
+
+    # Utility function to report best scores
+    def report(results, n_top=3):
+        for i in range(1, n_top + 1):
+            candidates = np.flatnonzero(results['rank_test_score'] == i)
+            for candidate in candidates:
+                print("Model with rank: {0}".format(i))
+                print("Mean validation score: {0:.3f} (std: {1:.3f})".format(
+                    results['mean_test_score'][candidate],
+                    results['std_test_score'][candidate]))
+                print("Parameters: {0}".format(results['params'][candidate]))
+                print("")
+
+    # run grid search
+    grid_search = GridSearchCV(pipe, param_grid=param_grid)
+    start = time()
+    grid_search.fit(X_train, y_train)
+
+    print("GridSearchCV took %.2f seconds for %d candidate parameter settings."
+        % (time() - start, len(grid_search.cv_results_['params'])))
+    report(grid_search.cv_results_)
+
+####### Get top features and noise #######
+def top_feat():
+    dummy, model = pipe.steps[-1]
+
+    feature_list = []
+    for feature in pipe.named_steps['featurize'].features:
+        try:
+            for feature_value in feature[1].classes_:
+                feature_list.append(feature[0]+'_'+feature_value)
+        except:
+            feature_list.append(feature[0])
+
+
+    # # Can't do the following with Binarizers and Label Binarizers due to change in columns
+    top_features = pd.DataFrame({'feature':feature_list,'importance':np.round(model.feature_importances_,3)})
+    top_features = top_features.sort_values('importance',ascending=False).set_index('feature')
+    # print(top_features)
+    top_features.to_csv('top_features.csv')
+    top_features.plot.bar()
+
+def output():
+    predictions = pipe.predict(test)
+    result = pd.DataFrame({
+        'PassengerId': test['PassengerId'],
+        'Survived': predictions
+        })
+
+    result.to_csv('python-magicalforest.csv', index=False)
 
 ################ Training ################################
 
 X_train = train
 y_train = train['Survived']
 
-# ##### Cross Validation
-crossval = cross_val_score(pipe, X_train, y_train, cv=10)
-print("Cross Validation Scores are: ", crossval.round(3))
-print("Mean CrossVal score is: ", round(crossval.mean(),3))
-
-# ##### GridSearch Tune hyperparameters #######
-# param_grid = { "forest__n_estimators"      : [1000], #[10,30,100,200, 300,1000],
-#            "forest__criterion"         : ["gini", "entropy"],
-#            "forest__max_features"      : [3, 5,"auto","sqrt","log2"],
-#            "forest__max_depth"         : [None, 10, 20],
-#            "forest__min_samples_split" : [2, 4],
-#         #    "forest__min_samples_leaf": [1, 3, 10, 50],
-#         #    "forest__bootstrap": [True, False],
-#         #    "forest__oob_score": [True,False]
-#            }
-
-# # run grid search
-# grid_search = GridSearchCV(pipe, param_grid=param_grid)
-# start = time()
-# grid_search.fit(X_train, y_train)
-
-# print("GridSearchCV took %.2f seconds for %d candidate parameter settings."
-#       % (time() - start, len(grid_search.cv_results_['params'])))
-# report(grid_search.cv_results_)
+crossval()
+# gridsearch()
 
 
 ##### Fit ######
 pipe.fit(X_train, y_train)
 
-####### Get top features and noise #######
-
-dummy, model = pipe.steps[-1]
-
-feature_list = []
-for feature in pipe.named_steps['featurize'].features:
-    try:
-        for feature_value in feature[1].classes_:
-            feature_list.append(feature[0]+'_'+feature_value)
-    except:
-        feature_list.append(feature[0])
+top_feat()
+output()
 
 
-# # Can't do the following with Binarizers and Label Binarizers due to change in columns
-top_features = pd.DataFrame({'feature':feature_list,'importance':np.round(model.feature_importances_,3)})
-top_features = top_features.sort_values('importance',ascending=False).set_index('feature')
-# print(top_features)
-top_features.to_csv('top_features.csv')
-top_features.plot.bar()
-
-predictions = pipe.predict(test)
-result = pd.DataFrame({
-    'PassengerId': test['PassengerId'],
-    'Survived': predictions
-    })
-
-result.to_csv('python-magicalforest.csv', index=False)
