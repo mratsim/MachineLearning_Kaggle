@@ -8,11 +8,12 @@ import re as re
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
-# from xgboost import XGBClassifier
+from xgboost import XGBClassifier
 from sklearn import preprocessing
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import LabelBinarizer, RobustScaler, Binarizer, StandardScaler, OneHotEncoder
+# from sklearn.feature_selection import SelectFromModel
 from sklearn_pandas import DataFrameMapper, cross_val_score
 from sklearn.model_selection import GridSearchCV
 from time import time
@@ -395,26 +396,26 @@ class LabelBinForBinaryVal(LabelBinarizer):
 
 
 mapper = DataFrameMapper([
-    (['Pclass'], OneHotEncoder()),
-#   (['Age'], None),
-# #    ('CptTitle', LabelBinarizer()),
+    # (['Pclass'], OneHotEncoder()),
+  (['Age'], None),
+#    ('CptTitle', LabelBinarizer()),
     ('Sex', LabelBinForBinaryVal()),
-#     # ('Ticket', LabelBinarizer()),
-   (['SibSp'], None),
-   (['Parch'], None),
-#     (['Fare'], None),
-# #    ('CptDeck', LabelBinarizer()),
-#     # (['CptTitleCat'], None),
+    # ('Ticket', LabelBinarizer()),
+#    (['SibSp'], None),
+#    (['Parch'], None),
+    # (['Fare'], None),
+#    ('CptDeck', LabelBinarizer()),
+    (['CptTitleCat'], None),
     ('CptTitleLabel', LabelBinarizer()),
-# #    ('CptName', LabelBinarizer()),
+#    ('CptName', LabelBinarizer()),
 # #    (['CptNameFreq'], None),
-#     (['CptFamSize'], None),
+    # (['CptFamSize'], None),
     ('CptFamType', LabelBinarizer()),
-#     (['CptFareGroup'], None),
+    # (['CptFareGroup'], None),
     (['CptAgeGroup'], None),
     (['CptFarePerson'], None),
 #    ('Embarked', LabelBinarizer()),
-#     (['CptTicketFreq'], None),
+    # (['CptTicketFreq'], None),
 #    (['CptAgeClass'], None)
     ])
 
@@ -442,37 +443,41 @@ pipe = Pipeline([
     ("extract_ageclass",PP_AgeClassTransformer()),
     ("DEBUG",DebugTransformer()),
      ("featurize", mapper),
-    ("forest", ExtraTreesClassifier(
-        n_estimators=1000,
-        min_samples_split=4,
-        min_samples_leaf=4,
-        criterion= 'entropy',
-        # max_features = 3,
-        max_depth = 10,
-        n_jobs=-1))
-    ])
-    # ("xgboost", XGBClassifier(
-    #     ))
+    # ("forest", ExtraTreesClassifier(
+    #     n_estimators=1000,
+    #     min_samples_split=4,
+    #     min_samples_leaf=4,
+    #     criterion= 'entropy',
+    #     # max_features = 3,
+    #     max_depth = 10,
+    #     n_jobs=-1))
     # ])
+    ("xgboost", XGBClassifier(
+        n_estimators=100,
+        min_child_weight=5,
+        max_depth=3,
+        learning_rate=0.1
+        ))
+    ])
 ########################Helper functions ################
 ##### Cross Validation
 def crossval():
-    cv = cross_val_score(pipe, X_train, y_train, cv=5)
+    cv = cross_val_score(pipe, X_train, y_train, cv=10)
     print("Cross Validation Scores are: ", cv.round(3))
     print("Mean CrossVal score is: ", round(cv.mean(),3))
     print("Std Dev CrossVal score is: ", round(cv.std(),3))
 
 ##### GridSearch Tune hyperparameters #######
 def gridsearch():
-    param_grid = { "forest__n_estimators"      : [10,30,150], #[10, 30, 150, 700, 1000],
-                # "forest__criterion"         : ["gini", "entropy"],
-            # "forest__max_features"      : [3, 5, 7, "auto","log2"],
-            "forest__max_depth"         : [None, 5,10,15,20],
-                "forest__min_samples_split" : [2,4,8,16],
-            "forest__min_samples_leaf": [1,2,4,8,16],
-            #    "forest__bootstrap": [True, False],
-            #    "forest__oob_score": [True,False]
-            }
+    # param_grid = { "forest__n_estimators"      : [10,30,150], #[10, 30, 150, 700, 1000],
+    #             # "forest__criterion"         : ["gini", "entropy"],
+    #         # "forest__max_features"      : [3, 5, 7, "auto","log2"],
+    #         "forest__max_depth"         : [None, 5,10,15,20],
+    #             "forest__min_samples_split" : [2,4,8,16],
+    #         "forest__min_samples_leaf": [1,2,4,8,16],
+    #            "forest__bootstrap": [True, False],
+    #         #    "forest__oob_score": [True,False]
+    #         }
             # GridSearchCV took 507.96 seconds for 300 candidate parameter settings.
             # Model with rank: 1
             # Mean validation score: 0.835 (std: 0.015)
@@ -488,6 +493,13 @@ def gridsearch():
             # Mean validation score: 0.834 (std: 0.019)
             # Parameters: {'forest__max_depth': 20, 'forest__min_samples_split': 8, 'forest__min_samples_leaf': 2, 'forest__n_estimators':
             # 30}
+    param_grid = {
+                    'xgboost__n_estimators' : [100, 150],
+                    'xgboost__learning_rate' :[0.1,0.2,0.3],
+                     'xgboost__max_depth':range(3,10,2),
+                    'xgboost__min_child_weight':range(1,6,2)
+            }
+
 
     # Utility function to report best scores
     def report(results, n_top=3):
