@@ -3,3 +3,5 @@
 *.json
 .DS_Store
 .ipynb_checkpoints
+core
+load_data.sh
