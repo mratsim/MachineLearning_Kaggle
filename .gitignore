@@ -5,3 +5,5 @@
 .ipynb_checkpoints
 core
 load_data.sh
+*.hdf5
+*.log
